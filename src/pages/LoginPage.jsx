@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthContext';
 import { errorMessage } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
 import Icon from '../components/Icon';
+import BrandLogo from '../components/BrandLogo';
 
 export default function LoginPage() {
   const { login, status } = useAuth();
@@ -30,12 +31,16 @@ export default function LoginPage() {
   return (
     <div className="login">
       <div className="login-art" aria-hidden>
-        <div className="pass pass-large"><span>Global Gift Pass</span><small>Admin console</small></div>
+        <div className="login-brand">
+          <BrandLogo surface="dark" className="login-logo" />
+          <p>Admin console</p>
+        </div>
       </div>
       <button type="button" className="icon-btn login-theme" onClick={toggle} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} theme`}>
         <Icon name={theme === 'dark' ? 'sun' : 'moon'} size={18} />
       </button>
       <form className="login-form" onSubmit={submit}>
+        <BrandLogo className="login-form-logo" />
         <h1>Sign in</h1>
         <p className="muted">Use your Global Gift Pass admin account.</p>
         {error && <div className="notice notice-error" role="alert">{error}</div>}

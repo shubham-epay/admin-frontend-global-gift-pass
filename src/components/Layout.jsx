@@ -5,6 +5,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { NAV } from '../config/resources';
 import Icon from './Icon';
 import CommandPalette from './CommandPalette';
+import BrandLogo from './BrandLogo';
 
 const SIDEBAR_KEY = 'ggp-admin-sidebar';
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
@@ -107,8 +108,10 @@ export default function Layout() {
     <div className={`shell ${drawerOpen ? 'drawer-open' : ''}`}>
       <aside className="sidebar" aria-label="Main navigation">
         <div className="brand">
-          <span className="pass" aria-hidden><span>GGP</span></span>
-          <span className="brand-name">Global Gift Pass<small>Admin console</small></span>
+          <Link to="/" className="brand-link" aria-label="Global Gift Pass admin home">
+            <BrandLogo />
+            <span className="brand-tag">Admin</span>
+          </Link>
           <button type="button" className="icon-btn on-dark drawer-close" aria-label="Close menu" onClick={() => setDrawerOpen(false)}><Icon name="close" size={18} /></button>
         </div>
         <nav id="nav">

@@ -289,7 +289,7 @@ export const resources = {
       { title: 'Appearance', fields: [
         { name: 'textPosition', label: 'Text position', type: 'segmented', options: BANNER_TEXT_POSITIONS, default: 'LEFT', required: true },
         { name: 'textTheme', label: 'Text colour', type: 'segmented', options: ['DARK', 'LIGHT'], optionLabel: (o) => (o === 'DARK' ? 'Dark text' : 'Light text'), default: 'DARK', required: true, help: 'Dark text for light images, light text for dark images' },
-        { name: 'buttonColor', label: 'Button colour', type: 'color', default: '#E0435A', swatches: ['#E0435A', '#1D6B57', '#D69A2D', '#16242B', '#2F5E86'], wide: true },
+        { name: 'buttonColor', label: 'Button colour', type: 'color', default: '#E0435A', swatches: ['#E0435A', '#EE0529', '#01124F', '#FDB51C', '#1B3A9C'], wide: true },
       ] },
       { title: 'Placement and schedule', fields: [
         { name: 'status', label: 'Status', type: 'select', options: PUBLISH, required: true, default: 'ACTIVE' },
