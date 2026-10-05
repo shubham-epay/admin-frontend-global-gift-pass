@@ -19,6 +19,8 @@ export default function OrderDetailPage() {
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const [confirm, setConfirm] = useState(false);
+  const [settle, setSettle] = useState(null); // { payment, op: 'capture' | 'void' }
+  const [settling, setSettling] = useState(false);
 
   const load = () => api.get(`/admin/orders/${id}`).then((r) => {
     const o = r.data.data;
@@ -43,6 +45,21 @@ export default function OrderDetailPage() {
     } finally { setSaving(false); }
   };
 
+  /** Captures (takes) or voids (releases) the amount held by a card authorization. */
+  const settleAuthorization = async () => {
+    setSettling(true);
+    try {
+      await api.post(`/admin/orders/${id}/payments/${settle.payment._id}/${settle.op}`, {});
+      toast(settle.op === 'capture' ? 'Payment captured, order marked paid' : 'Authorization voided');
+    } catch (e) {
+      toast(errorMessage(e), 'error');
+    } finally {
+      setSettling(false);
+      setSettle(null);
+      await load(); // the payment may have changed even when the call failed
+    }
+  };
+
   const onSubmit = (e) => {
     e.preventDefault();
     if (DESTRUCTIVE[form.orderStatus]) setConfirm(true); else save();
@@ -52,6 +69,7 @@ export default function OrderDetailPage() {
   if (!order) return <div className="page"><p className="muted">Loading…</p></div>;
 
   const canUpdate = can('orders.updateStatus');
+  const canSettle = can('orders.managePayments');
   const terminal = order.allowedTransitions.length === 0;
   const canIssue = can('vouchers.create') && ['PAID', 'PROCESSING', 'SENT', 'DELIVERED'].includes(order.orderStatus);
 
@@ -117,6 +135,15 @@ export default function OrderDetailPage() {
                 <div><dt>Reference</dt><dd className="mono">{p.providerReference || '—'}</dd></div>
                 <div><dt>Amount</dt><dd>{money(p.amount, p.currency)}{p.refundedAmount > 0 && ` (refunded ${money(p.refundedAmount)})`}</dd></div>
                 <div><dt>Status</dt><dd><StatusBadge value={p.status} /></dd></div>
+                {canSettle && p.status === 'AUTHORIZED' && p.method === 'DIRECT_CARD' && (
+                  <div>
+                    <dt>Authorization</dt>
+                    <dd className="head-actions">
+                      <button type="button" className="btn btn-sm btn-primary" onClick={() => setSettle({ payment: p, op: 'capture' })}>Capture</button>
+                      <button type="button" className="btn btn-sm btn-danger" onClick={() => setSettle({ payment: p, op: 'void' })}>Void</button>
+                    </dd>
+                  </div>
+                )}
               </dl>
             ))}
           </section>
@@ -182,6 +209,13 @@ export default function OrderDetailPage() {
       <ConfirmDialog open={confirm} title={`${DESTRUCTIVE[form.orderStatus]}?`}
         body="All active vouchers on this order will be cancelled. This status is final and can’t be reversed."
         confirmLabel={DESTRUCTIVE[form.orderStatus]} busy={saving} onConfirm={save} onCancel={() => setConfirm(false)} />
+      <ConfirmDialog open={Boolean(settle)}
+        title={settle?.op === 'void' ? 'Void this authorization?' : 'Capture this payment?'}
+        body={settle?.op === 'void'
+          ? `The ${settle ? money(settle.payment.amount, settle.payment.currency) : ''} held on the customer’s card is released and nothing is charged. This can’t be undone.`
+          : `${settle ? money(settle.payment.amount, settle.payment.currency) : ''} is charged to the customer’s card and the order is marked paid. This can’t be undone, only refunded.`}
+        confirmLabel={settle?.op === 'void' ? 'Void authorization' : 'Capture payment'} busy={settling}
+        onConfirm={settleAuthorization} onCancel={() => setSettle(null)} />
     </div>
   );
 }
