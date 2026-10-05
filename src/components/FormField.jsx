@@ -1,6 +1,10 @@
 import RefSelect from './RefSelect';
 import ListInput from './ListInput';
 import PermissionPicker from './PermissionPicker';
+import PasswordInput from './PasswordInput';
+import CustomFieldsEditor from './CustomFieldsEditor';
+import SuggestInput from './SuggestInput';
+import DenominationsEditor from './DenominationsEditor';
 import { humanize } from '../utils/format';
 
 export default function FormField({ field, value, onChange, error, disabled }) {
@@ -93,6 +97,18 @@ export default function FormField({ field, value, onChange, error, disabled }) {
         </div>
       );
       break;
+    case 'denominations':
+      control = <DenominationsEditor value={value || []} onChange={onChange} disabled={disabled} currency={field.currency} />;
+      break;
+    case 'customFields':
+      control = <CustomFieldsEditor value={value || []} onChange={onChange} disabled={disabled} />;
+      break;
+    case 'suggest':
+      control = <SuggestInput {...common} field={field} value={value ?? ''} onChange={onChange} />;
+      break;
+    case 'password':
+      control = <PasswordInput {...common} autoComplete="new-password" placeholder={field.placeholder} maxLength={128} value={value ?? ''} onChange={(e) => onChange(e.target.value)} />;
+      break;
     default:
       control = (
         <input
@@ -110,7 +126,7 @@ export default function FormField({ field, value, onChange, error, disabled }) {
 
   return (
     <div className={`field ${field.wide ? 'field-wide' : ''}`}>
-      {field.type !== 'checkbox' && (
+      {field.type !== 'checkbox' && field.label && (
         <label htmlFor={id} id={`${id}-label`} className="field-label">
           {field.label}{field.required && <span className="req" aria-hidden> *</span>}
         </label>

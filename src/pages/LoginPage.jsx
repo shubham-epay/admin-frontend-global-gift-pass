@@ -5,6 +5,7 @@ import { errorMessage } from '../api/client';
 import { useTheme } from '../theme/ThemeContext';
 import Icon from '../components/Icon';
 import BrandLogo from '../components/BrandLogo';
+import PasswordInput from '../components/PasswordInput';
 
 export default function LoginPage() {
   const { login, status } = useAuth();
@@ -50,7 +51,7 @@ export default function LoginPage() {
         </div>
         <div className="field">
           <label className="field-label" htmlFor="password">Password</label>
-          <input id="password" className="input" type="password" autoComplete="current-password" required value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
+          <PasswordInput id="password" autoComplete="current-password" required value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} />
         </div>
         <label className="check">
           <input type="checkbox" checked={form.rememberMe} onChange={(e) => setForm({ ...form, rememberMe: e.target.checked })} />

@@ -4,6 +4,7 @@ import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
 import { dateTime } from '../utils/format';
+import PasswordInput from '../components/PasswordInput';
 
 export default function AccountPage() {
   const { user, applySession, logout } = useAuth();
@@ -39,13 +40,13 @@ export default function AccountPage() {
         {errors.form && <div className="notice notice-error">{errors.form}</div>}
         <form onSubmit={submit} className="stack-sm">
           <div className="field"><label className="field-label" htmlFor="cp">Current password</label>
-            <input id="cp" className="input" type="password" autoComplete="current-password" {...f('currentPassword')} />
+            <PasswordInput id="cp" autoComplete="current-password" {...f('currentPassword')} />
             {errors.currentPassword && <p className="field-error">{errors.currentPassword}</p>}</div>
           <div className="field"><label className="field-label" htmlFor="np">New password</label>
-            <input id="np" className="input" type="password" autoComplete="new-password" {...f('newPassword')} />
-            {errors.newPassword ? <p className="field-error">{errors.newPassword}</p> : <p className="field-help">At least 12 characters with upper and lower case, a number and a symbol.</p>}</div>
+            <PasswordInput id="np" autoComplete="new-password" {...f('newPassword')} />
+            {errors.newPassword ? <p className="field-error">{errors.newPassword}</p> : <p className="field-help">At least 8 characters with upper and lower case, a number and a symbol.</p>}</div>
           <div className="field"><label className="field-label" htmlFor="cf">Confirm new password</label>
-            <input id="cf" className="input" type="password" autoComplete="new-password" {...f('confirm')} />
+            <PasswordInput id="cf" autoComplete="new-password" {...f('confirm')} />
             {errors.confirm && <p className="field-error">{errors.confirm}</p>}</div>
           <button type="submit" className="btn btn-primary" disabled={busy || !form.currentPassword || !form.newPassword}>{busy ? 'Saving…' : 'Change password'}</button>
         </form>

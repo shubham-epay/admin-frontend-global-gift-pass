@@ -117,6 +117,11 @@ export default function ProductImportPage() {
   const [page, setPage] = useState(1);
   const [guide, setGuide] = useState(null);
   const [showGuide, setShowGuide] = useState(false);
+  // Extra (unrecognised) columns: header -> 'public' | 'internal' | 'ignore'. null = use the server's suggestions.
+  const [customCols, setCustomCols] = useState(null);
+  const [countryFilter, setCountryFilter] = useState('all');
+  const [activating, setActivating] = useState(false);
+  const [activated, setActivated] = useState(0);
   const runId = useRef(0);
 
   const setOpt = (k, v) => setOptions((o) => ({ ...o, [k]: v }));
@@ -127,8 +132,9 @@ export default function ProductImportPage() {
       const v = options[k];
       if (v !== null && v !== undefined && String(v).trim() !== '') p[k] = String(v).trim();
     }
+    if (customCols) p.customColumns = JSON.stringify(customCols);
     return p;
-  }, [options]);
+  }, [options, customCols]);
 
   const send = useCallback((dryRun) => api.post('/admin/products/import', file.text, {
     params: params(dryRun), headers: { 'Content-Type': 'text/csv' }, timeout: dryRun ? 60000 : 300000,
@@ -154,13 +160,47 @@ export default function ProductImportPage() {
   }, [showGuide, guide]);
 
   const onFile = async (f) => {
-    setError(null); setResult(null); setPlan(null); setFilter('all');
+    setError(null); setResult(null); setPlan(null); setFilter('all'); setCustomCols(null); setCountryFilter('all');
     if (!/\.csv$/i.test(f.name) && !/csv|excel|text\/plain/.test(f.type)) { setError('Choose a .csv file. In Excel or Google Sheets use File → Download / Save as → CSV.'); return; }
     if (f.size > MAX_BYTES) { setError(`That file is ${fmtBytes(f.size)}. The limit is 10 MB — split it into smaller files.`); return; }
     setFile({ name: f.name, size: f.size, text: await f.text() });
   };
 
-  const reset = () => { setFile(null); setPlan(null); setResult(null); setError(null); setFilter('all'); };
+  const reset = () => { setFile(null); setPlan(null); setResult(null); setError(null); setFilter('all'); setCustomCols(null); setCountryFilter('all'); setActivated(0); };
+
+  /** Imported products that are not ACTIVE are invisible on the website: offer to publish them in one go. */
+  const activateImported = async () => {
+    setActivating(true);
+    try {
+      const { data } = await api.post('/admin/products/bulk', { action: 'setStatus', status: 'ACTIVE', ids: result.notActiveIds });
+      setActivated(data.data.updated);
+      toast(`${data.data.updated} product${data.data.updated === 1 ? '' : 's'} are now live on the website`);
+    } catch (err) { toast(errorMessage(err), 'error'); } finally { setActivating(false); }
+  };
+
+  /** Current choice for every extra column (the server's suggestion until the admin changes one). */
+  const extraColumns = useMemo(() => {
+    if (!plan) return [];
+    const applied = Object.fromEntries(plan.columns.custom.map((c) => [c.header, c.visibility]));
+    return [...plan.columns.custom.map((c) => c.header), ...plan.columns.ignored].map((header) => ({
+      header, choice: customCols?.[header] || applied[header] || 'ignore', suggested: plan.columns.suggested?.[header],
+    }));
+  }, [plan, customCols]);
+  const chooseColumn = (header, choice) => {
+    setCustomCols(Object.fromEntries(extraColumns.map((c) => [c.header, c.header === header ? choice : c.choice])));
+  };
+
+  /** Rows grouped by (first) country, for the country chips. */
+  const countryGroups = useMemo(() => {
+    const m = new Map();
+    for (const r of plan?.rows || []) {
+      const c = r.preview.countries?.[0];
+      const key = c ? c.name : '';
+      if (!m.has(key)) m.set(key, { name: c?.name || 'No country (global)', flag: c?.flag || '🌐', created: c?.created, count: 0 });
+      m.get(key).count += 1;
+    }
+    return [...m.entries()].map(([key, v]) => ({ key, ...v }));
+  }, [plan]);
 
   const runImport = async () => {
     setImporting(true); setError(null);
@@ -193,8 +233,10 @@ export default function ProductImportPage() {
   const failedRows = useMemo(() => new Map((result?.failed || []).map((f) => [f.row, f.message])), [result]);
   const visible = useMemo(() => {
     if (!plan) return [];
-    return plan.rows.filter((r) => (filter === 'all' ? true : filter === 'warn' ? r.warnings.length > 0 : r.action === filter));
-  }, [plan, filter]);
+    return plan.rows
+      .filter((r) => (filter === 'all' ? true : filter === 'warn' ? r.warnings.length > 0 : r.action === filter))
+      .filter((r) => countryFilter === 'all' || (r.preview.countries?.[0]?.name || '') === countryFilter);
+  }, [plan, filter, countryFilter]);
   const pageRows = visible.slice((page - 1) * PAGE, page * PAGE);
   const pages = Math.max(1, Math.ceil(visible.length / PAGE));
   const importable = plan ? plan.summary.create + plan.summary.update : 0;
@@ -225,14 +267,28 @@ export default function ProductImportPage() {
           <h2>Import finished</h2>
           <p className="muted">{file?.name}</p>
           <SummaryTiles plan={plan} result={result} />
-          {(result.createdReferences?.categories?.length > 0 || result.createdReferences?.partners?.length > 0) && (
+          {(result.createdReferences?.categories?.length > 0 || result.createdReferences?.partners?.length > 0 || result.createdReferences?.countries?.length > 0) && (
             <p className="muted">
               Also created
+              {result.createdReferences.countries?.length > 0 && <> countries: <strong>{result.createdReferences.countries.join(', ')}</strong> (shown on the website — change this under Countries)</>}
               {result.createdReferences.categories.length > 0 && <> categories: <strong>{result.createdReferences.categories.join(', ')}</strong></>}
               {result.createdReferences.partners.length > 0 && <> partners: <strong>{result.createdReferences.partners.join(', ')}</strong></>}
               . Review their details before publishing.
             </p>
           )}
+          {result.notActiveIds?.length > 0 && !activated && (
+            <div className="activate-callout">
+              <Icon name="info" size={18} />
+              <span className="grow">
+                <strong>{result.notActiveIds.length} new product{result.notActiveIds.length === 1 ? ' is' : 's are'} not active yet</strong>
+                <small className="block">They were imported as {humanize(options.status).toLowerCase()} and won’t appear on the website until they’re active.</small>
+              </span>
+              <button type="button" className="btn btn-primary" onClick={activateImported} disabled={activating}>
+                {activating ? <><span className="spinner spinner-light" />Activating…</> : <><Icon name="check" size={16} />Make them active</>}
+              </button>
+            </div>
+          )}
+          {activated > 0 && <p className="activate-done"><Icon name="check" size={16} /> {activated} product{activated === 1 ? ' is' : 's are'} now live on the website.</p>}
           <div className="done-actions">
             <Link to="/products" className="btn btn-primary"><Icon name="box" size={16} />View products</Link>
             <button type="button" className="btn" onClick={reset}><Icon name="upload" size={16} />Import another file</button>
@@ -298,10 +354,43 @@ export default function ProductImportPage() {
                       {plan.columns.ignored.map((h) => <span key={h} className="map-chip is-ignored" title="Not imported"><code>{h}</code></span>)}
                     </div>
                   </details>
-                  {(plan.newReferences.categories.length > 0 || plan.newReferences.partners.length > 0) && (
+                  {extraColumns.length > 0 && (
+                    <div className="extra-cols">
+                      <div className="row-between">
+                        <strong>Extra columns</strong>
+                        <span className="muted small">Kept on each product as custom fields. Public ones show on the website.</span>
+                      </div>
+                      <ul>
+                        {extraColumns.map((c) => (
+                          <li key={c.header}>
+                            <code title={c.header}>{c.header}</code>
+                            <div className="segmented segmented-inline segmented-sm" role="radiogroup" aria-label={`Use of column ${c.header}`}>
+                              {[['ignore', 'Ignore'], ['internal', 'Internal'], ['public', 'Public']].map(([v, l]) => (
+                                <button key={v} type="button" role="radio" aria-checked={c.choice === v} className={c.choice === v ? 'is-on' : ''} onClick={() => chooseColumn(c.header, v)}>{l}</button>
+                              ))}
+                            </div>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {(plan.newReferences.categories.length > 0 || plan.newReferences.partners.length > 0 || plan.newReferences.countries?.length > 0) && (
                     <div className="notice"><Icon name="sparkle" size={16} /> Will also create
+                      {plan.newReferences.countries?.length > 0 && <> countries <strong>{plan.newReferences.countries.join(', ')}</strong>{(plan.newReferences.categories.length > 0 || plan.newReferences.partners.length > 0) && ','}</>}
                       {plan.newReferences.categories.length > 0 && <> categories <strong>{plan.newReferences.categories.join(', ')}</strong></>}
                       {plan.newReferences.partners.length > 0 && <> partners <strong>{plan.newReferences.partners.join(', ')}</strong></>}.
+                    </div>
+                  )}
+                  {countryGroups.length > 1 && (
+                    <div className="country-chips" role="radiogroup" aria-label="Group by country">
+                      <button type="button" role="radio" aria-checked={countryFilter === 'all'} className={`country-chip ${countryFilter === 'all' ? 'is-on' : ''}`} onClick={() => { setCountryFilter('all'); setPage(1); }}>
+                        All countries<span className="tab-count">{plan.rows.length}</span>
+                      </button>
+                      {countryGroups.map((g) => (
+                        <button key={g.key || 'none'} type="button" role="radio" aria-checked={countryFilter === g.key} className={`country-chip ${countryFilter === g.key ? 'is-on' : ''}`} onClick={() => { setCountryFilter(g.key); setPage(1); }}>
+                          <span aria-hidden>{g.flag}</span>{g.name}{g.created && <span className="new-tag">new</span>}<span className="tab-count">{g.count}</span>
+                        </button>
+                      ))}
                     </div>
                   )}
                   <div className="tabs" role="tablist">
@@ -330,8 +419,14 @@ export default function ProductImportPage() {
                             <td>
                               {r.preview.category || <span className="muted">—</span>}{r.preview.newCategory && <span className="new-tag">new</span>}
                               <small className="block muted">{r.preview.partner || '—'}{r.preview.newPartner && <span className="new-tag">new</span>}</small>
+                              {r.preview.countries?.length > 0 && <small className="block flags" title={r.preview.countries.map((c) => c.name).join(', ')}>{r.preview.countries.map((c) => c.flag || c.name).join(' ')}</small>}
+                              {r.preview.customFields > 0 && <small className="block muted">+{r.preview.customFields} custom field{r.preview.customFields === 1 ? '' : 's'}</small>}
                             </td>
-                            <td className="num">{r.preview.salePrice != null ? money(r.preview.salePrice, r.preview.currency) : '—'}{r.preview.price != null && r.preview.salePrice < r.preview.price && <s className="muted strike block">{money(r.preview.price, r.preview.currency)}</s>}
+                            <td className="num">{r.preview.denominations?.length > 1
+                              ? <>{money(r.preview.denominations[0], r.preview.currency)} – {money(r.preview.denominations[r.preview.denominations.length - 1], r.preview.currency)}<small className="block muted" title={r.preview.denominations.join(', ')}>{r.preview.denominations.length} denominations</small></>
+                              : r.preview.amountMin != null
+                              ? <>{money(r.preview.amountMin, r.preview.currency)}<small className="block muted">to {money(r.preview.amountMax, r.preview.currency)} · customer chooses</small></>
+                              : <>{r.preview.salePrice != null ? money(r.preview.salePrice, r.preview.currency) : '—'}{r.preview.price != null && r.preview.salePrice < r.preview.price && <s className="muted strike block">{money(r.preview.price, r.preview.currency)}</s>}</>}
                               <small className="block muted">{r.preview.status ? humanize(r.preview.status) : '—'}</small></td>
                             <td><span className={`badge badge-${ACTION_TONE[r.action]}`}>{failedRows.has(r.row) ? 'Failed' : ACTION_LABEL[r.action]}</span></td>
                           </tr>
@@ -387,7 +482,7 @@ export default function ProductImportPage() {
                   <select id="d-status" className="input" value={options.status} onChange={(e) => setOpt('status', e.target.value)}>
                     {PRODUCT_STATUS.map((s) => <option key={s} value={s}>{humanize(s)}</option>)}
                   </select>
-                  <p className="field-help">Used when the file has no status / active column. Draft keeps them off the store until reviewed.</p>
+                  <p className="field-help">Used when the file has no status / active column. <strong>Only Active products appear on the website</strong> — Draft keeps them hidden until you review and activate them.</p>
                 </div>
                 <label className="check">
                   <input type="checkbox" checked={options.createMissing} onChange={(e) => setOpt('createMissing', e.target.checked)} />

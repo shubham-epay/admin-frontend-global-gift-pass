@@ -3,6 +3,7 @@ import { api, errorMessage, fieldErrors } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
 import { useToast } from '../components/Toast';
 import ConfirmDialog from '../components/ConfirmDialog';
+import PasswordInput from '../components/PasswordInput';
 
 export default function UserSecurityPanel({ user }) {
   const { user: me } = useAuth();
@@ -42,10 +43,10 @@ export default function UserSecurityPanel({ user }) {
       <form className="inline-form" onSubmit={reset}>
         <div className="field">
           <label className="field-label" htmlFor="reset-pw">Set a new password</label>
-          <input id="reset-pw" className="input" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          <PasswordInput id="reset-pw" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
           {error ? <p className="field-error">{error}</p> : <p className="field-help">Signs the user out of every device.</p>}
         </div>
-        <button type="submit" className="btn" disabled={busy || password.length < 12}>Reset password</button>
+        <button type="submit" className="btn" disabled={busy || password.length < 8}>Reset password</button>
       </form>
       <div className="divider" />
       <div className="row-between">

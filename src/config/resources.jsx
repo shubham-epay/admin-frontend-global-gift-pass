@@ -1,5 +1,12 @@
+import { Link } from 'react-router-dom';
 import { money, date, dateTime } from '../utils/format';
 import BannerPreview from '../components/BannerPreview';
+import CountryVisibilityToggle from '../components/CountryVisibilityToggle';
+import { FactChips, FactsSummary, PriceCell } from '../components/ProductFacts';
+
+const countryFlags = (list = []) => (list.length
+  ? <span className="flags" title={list.map((c) => c.name).join(', ')}>{list.slice(0, 4).map((c) => <span key={c._id}>{c.flag || c.code || '🏳️'}</span>)}{list.length > 4 && <small className="muted">+{list.length - 4}</small>}</span>
+  : <span className="muted">Global</span>);
 
 const PUBLISH = ['ACTIVE', 'INACTIVE'];
 const PRODUCT_STATUS = ['DRAFT', 'ACTIVE', 'INACTIVE', 'ARCHIVED'];
@@ -23,26 +30,37 @@ export const resources = {
   products: {
     key: 'products', title: 'Products', singular: 'Product', path: '/products', endpoint: '/admin/products',
     importPath: '/products/import', importPerm: 'products.create',
+    bulk: {
+      endpoint: '/admin/products/bulk',
+      statuses: [
+        { value: 'ACTIVE', label: 'Make active', icon: 'check', primary: true },
+        { value: 'DRAFT', label: 'Set to draft' },
+        { value: 'INACTIVE', label: 'Set inactive' },
+        { value: 'ARCHIVED', label: 'Archive' },
+      ],
+    },
     perms: { read: 'products.read', create: 'products.create', update: 'products.update', delete: 'products.delete' },
     search: 'Search title, slug, city or supplier ref',
+    Summary: FactsSummary,
     columns: [
       { key: 'imageUrls', type: 'thumb' },
       { key: 'title', label: 'Experience', type: 'title', sub: (r) => r.partnerId?.name },
       { key: 'categoryId.name', label: 'Category' },
-      { key: 'city', label: 'City' },
-      { key: 'salePrice', label: 'Price', type: 'money', render: (r) => (
-        <span>{money(r.salePrice)}{r.salePrice < r.price && <s className="muted strike">{money(r.price)}</s>}</span>) },
+      { key: 'countries', label: 'Countries', render: (r) => countryFlags(r.countries) },
+      { key: 'salePrice', label: 'Price', type: 'money', render: (r) => <PriceCell product={r} /> },
+      { key: 'facts', label: 'Delivery · Type · Margin', render: (r) => <FactChips product={r} /> },
       { key: 'status', label: 'Status', type: 'status' },
     ],
     filters: [
       { key: 'status', label: 'Status', options: PRODUCT_STATUS },
       { key: 'featured', label: 'Featured', options: ['true', 'false'], optionLabel: (o) => (o === 'true' ? 'Featured' : 'Not featured') },
+      { key: 'country', label: 'Country', endpoint: '/admin/countries', optionText: (c) => `${c.flag || ''} ${c.name}`.trim() },
     ],
     sections: [
       { title: 'Experience', fields: [
         { name: 'title', label: 'Title', required: true, max: 200, wide: true },
         { name: 'slug', label: 'URL slug', type: 'slug', source: 'title', required: true, help: 'Used in the product URL' },
-        { name: 'status', label: 'Status', type: 'select', options: PRODUCT_STATUS, required: true, default: 'DRAFT' },
+        { name: 'status', label: 'Status', type: 'select', options: PRODUCT_STATUS, required: true, default: 'DRAFT', help: 'Only Active products appear on the website' },
         { name: 'categoryId', label: 'Category', type: 'ref', endpoint: '/admin/categories', labelKey: 'name', required: true },
         { name: 'partnerId', label: 'Partner', type: 'ref', endpoint: '/admin/partners', labelKey: 'name', required: true, refLabel: (p) => `${p.name} · ${p.city}` },
         { name: 'shortDescription', label: 'Short description', type: 'textarea', rows: 2, max: 500, wide: true },
@@ -52,13 +70,19 @@ export const resources = {
       { title: 'Price and validity', fields: [
         { name: 'price', label: 'Price', type: 'money', required: true },
         { name: 'salePrice', label: 'Sale price', type: 'money', required: true, help: 'Same as price if not discounted' },
+        { name: 'currency', label: 'Currency', uppercase: true, max: 3, default: 'AED', help: '3-letter code, e.g. AED, USD, GBP' },
+        { name: 'denominations', label: 'Denominations', type: 'denominations', wide: true, help: '' },
+        { name: 'amountMin', label: 'Open amount: minimum', type: 'number', step: '0.01', min: 0, help: 'Only for products where the customer chooses the value (e.g. a 50–5,000 gift card)' },
+        { name: 'amountMax', label: 'Open amount: maximum', type: 'number', step: '0.01', min: 0, help: 'Set both or leave both empty' },
         { name: 'duration', label: 'Duration', required: true, placeholder: 'e.g. 90 minutes', max: 60 },
         { name: 'validityDays', label: 'Voucher validity (days)', type: 'number', required: true, default: 365, min: 1 },
         { name: 'peopleCount', label: 'People included', type: 'number', min: 1 },
       ] },
-      { title: 'Location', fields: [
-        { name: 'city', label: 'City', required: true },
-        { name: 'country', label: 'Country', required: true, default: 'United Arab Emirates' },
+      { title: 'Where it is sold', fields: [
+        { name: 'countries', label: 'Countries', type: 'refMulti', endpoint: '/admin/countries', labelKey: 'name', refLabel: (c) => `${c.flag || ''} ${c.name}`.trim(), wide: true,
+          help: 'Leave empty to show it in every country. Otherwise it only shows when the visitor picks one of these countries (or Global).' },
+        { name: 'city', label: 'City', help: 'Optional, e.g. for experiences' },
+        { name: 'country', label: 'Location (country name)', required: true, default: 'United Arab Emirates' },
       ] },
       { title: 'Images', fields: [
         { name: 'imageUrls', label: 'Main images', type: 'urlList', required: true, wide: true, help: 'First image is the cover. At least one.' },
@@ -76,6 +100,9 @@ export const resources = {
         { name: 'howToUse', label: 'How to use', type: 'lines', rows: 6, wide: true, help: 'One step per line, in order' },
         { name: 'importantInstructions', label: 'Important instructions', type: 'lines', rows: 6, wide: true, help: 'One instruction per line' },
         { name: 'legalNote', label: 'Legal note', type: 'textarea', rows: 2, wide: true },
+      ] },
+      { title: 'Custom fields', fields: [
+        { name: 'customFields', label: '', type: 'customFields', wide: true, help: 'Extra details such as delivery type or margin. Public fields show on the product page; internal ones stay here.' },
       ] },
       { title: 'Supplier', fields: [
         { name: 'supplierReference', label: 'Supplier reference', max: 120 },
@@ -109,6 +136,34 @@ export const resources = {
         { name: 'bannerUrl', label: 'Banner URL', type: 'url' },
       ] },
       { title: 'Search engines', fields: seo },
+    ],
+  },
+
+  countries: {
+    key: 'countries', title: 'Countries', singular: 'Country', path: '/countries', endpoint: '/admin/countries',
+    perms: { read: 'countries.manage', create: 'countries.manage', update: 'countries.manage', delete: 'countries.manage' },
+    search: 'Search name, code or currency',
+    createLabel: 'Add country',
+    columns: [
+      { key: 'name', label: 'Country', render: (r) => <span className="country-cell"><span className="country-flag" aria-hidden>{r.flag || '🏳️'}</span><span className="cell-title"><strong>{r.name}</strong><small>{[r.code, r.currency].filter(Boolean).join(' · ')}</small></span></span> },
+      { key: 'productCount', label: 'Products', render: (r) => (r.productCount
+        ? <span className="cell-title"><Link to={`/products?country=${r._id}`} onClick={(e) => e.stopPropagation()}>{r.productCount} product{r.productCount === 1 ? '' : 's'}</Link>
+          <small className={r.liveCount ? '' : 'warn-text'}>{r.liveCount ? `${r.liveCount} live on the website` : 'None active yet'}{r.liveCount < r.productCount && <> · <Link to={`/products?country=${r._id}&status=DRAFT`} onClick={(e) => e.stopPropagation()}>{r.productCount - r.liveCount} not active</Link></>}</small></span>
+        : <span className="muted">0</span>) },
+      { key: 'sortOrder', label: 'Order' },
+      { key: 'status', label: 'Show on website', render: (r) => <CountryVisibilityToggle key={`${r._id}-${r.status}`} country={r} /> },
+    ],
+    filters: [{ key: 'status', label: 'Visibility', options: PUBLISH, optionLabel: (o) => (o === 'ACTIVE' ? 'Shown' : 'Hidden') }],
+    sections: [
+      { title: 'Country', fields: [
+        { name: 'name', label: 'Name', type: 'suggest', required: true, max: 80, placeholder: 'Start typing, e.g. United Arab Emirates', suggestEndpoint: '/admin/countries/iso', suggestLabel: (c) => c.name,
+          help: 'Pick from the list and the ISO code, flag and currency are filled in for you' },
+        { name: 'code', label: 'ISO code', uppercase: true, max: 2, placeholder: 'AE', help: '2 letters. Optional when the name is recognised.' },
+        { name: 'currency', label: 'Currency', uppercase: true, max: 3, placeholder: 'AED' },
+        { name: 'status', label: 'Show on website', type: 'segmented', options: PUBLISH, optionLabel: (o) => (o === 'ACTIVE' ? 'Shown' : 'Hidden'), default: 'ACTIVE', required: true,
+          help: 'Hidden countries are removed from the website country picker, together with products sold only there' },
+        { name: 'sortOrder', label: 'Sort order', type: 'number', default: 0, help: 'Lower numbers show first in the picker' },
+      ] },
     ],
   },
 
@@ -395,7 +450,7 @@ export const resources = {
         { name: 'roleId', label: 'Role', type: 'ref', endpoint: '/admin/roles', labelKey: 'name', required: true },
         { name: 'status', label: 'Status', type: 'select', options: USER_STATUS, required: true, default: 'ACTIVE' },
         { name: 'password', label: 'Temporary password', type: 'password', required: true, createOnly: true,
-          help: 'At least 12 characters with upper and lower case, a number and a symbol. Share it securely.' },
+          help: 'At least 8 characters with upper and lower case, a number and a symbol. Share it securely.' },
       ] },
     ],
     extra: 'userSecurity',
@@ -471,6 +526,7 @@ export const NAV = [
   { label: 'Catalogue', items: [
     { to: '/products', label: 'Products', perm: 'products.read', icon: 'box' },
     { to: '/categories', label: 'Categories', perm: 'categories.manage', icon: 'tag' },
+    { to: '/countries', label: 'Countries', perm: 'countries.manage', icon: 'globe' },
     { to: '/partners', label: 'Partners', perm: 'partners.manage', icon: 'store' },
     { to: '/gift-boxes', label: 'Gift boxes', perm: 'giftBoxes.manage', icon: 'gift' },
   ] },

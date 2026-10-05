@@ -9,7 +9,7 @@ import ConfirmDialog from '../components/ConfirmDialog';
 import UserSecurityPanel from './UserSecurityPanel';
 import { fromDateInput, fromDateTimeInput, slugify, toDateInput, toDateTimeInput, dateTime } from '../utils/format';
 
-const LIST_TYPES = ['urlList', 'tags', 'refMulti', 'permissions'];
+const LIST_TYPES = ['urlList', 'tags', 'refMulti', 'permissions', 'customFields', 'denominations'];
 
 function emptyFor(f) {
   if (f.default !== undefined) return f.default;
@@ -30,6 +30,8 @@ function fromDoc(fields, doc) {
       case 'datetime': out[f.name] = toDateTimeInput(v); break;
       case 'checkbox': out[f.name] = Boolean(v); break;
       case 'urlList': case 'tags': case 'permissions': out[f.name] = v || []; break;
+      case 'customFields': out[f.name] = (v || []).map(({ key, label, value, public: pub }) => ({ key, label, value: value ?? '', public: Boolean(pub) })); break;
+      case 'denominations': out[f.name] = (v || []).map((d) => ({ ...d, value: d.value ?? '', price: d.price ?? '', oldPrice: d.oldPrice ?? '', attributes: d.attributes || [] })); break;
       case 'lines': out[f.name] = (v || []).join('\n'); break;
       case 'pairs': out[f.name] = (v || []).map((p) => (p.value ? `${p.label}: ${p.value}` : p.label)).join('\n'); break;
       case 'password': out[f.name] = ''; break;
@@ -52,6 +54,20 @@ function toPayload(fields, values, isNew) {
       case 'datetime': v = fromDateTimeInput(v); break;
       case 'checkbox': v = Boolean(v); break;
       case 'ref': v = v || null; break;
+      case 'customFields': v = (v || []).filter((r) => r.label?.trim()).map((r) => ({ ...r, label: r.label.trim(), value: (r.value || '').trim() })); break;
+      case 'denominations': {
+        const toNum = (x) => (x === '' || x == null ? undefined : Number(x));
+        v = (v || []).filter((d) => d.value !== '' && d.value != null).map((d) => ({
+          value: toNum(d.value),
+          price: toNum(d.price) ?? toNum(d.value),
+          ...(toNum(d.oldPrice) != null && { oldPrice: toNum(d.oldPrice) }),
+          ...(d.label && { label: d.label }),
+          ...(d.img && { img: d.img }),
+          attributes: (d.attributes || []).filter((a) => a.label?.trim()).map((a) => ({ label: a.label.trim(), value: String(a.value ?? '').trim(), public: Boolean(a.public) })),
+        }));
+        if (v.some((d) => Number.isNaN(d.value) || Number.isNaN(d.price))) errors[f.name] = 'Denominations must be numbers';
+        break;
+      }
       // One item per line. Pairs are "Label: value".
       case 'lines': v = String(v || '').split('\n').map((x) => x.trim()).filter(Boolean); break;
       case 'pairs':
@@ -187,6 +203,7 @@ export default function ResourceFormPage({ resource }) {
       {readOnly && <div className="notice">{resource.readOnlyWhen?.(doc) ? resource.readOnlyNote : 'You can view this record but not change it.'}</div>}
       {formError && <div className="notice notice-error" role="alert">{formError}</div>}
 
+      {resource.Summary && doc && <resource.Summary product={doc} />}
       {resource.Preview && <resource.Preview values={values} />}
 
       <form id="resource-form" onSubmit={submit} noValidate>
